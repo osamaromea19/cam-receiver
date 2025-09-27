@@ -6,12 +6,12 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 100%;
             padding: 20px;
             text-align: center;
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             color: white;
             min-height: 100vh;
+            margin: 0;
         }
         .container {
             background: rgba(255, 255, 255, 0.1);
@@ -26,8 +26,16 @@
             border: 3px solid white;
             border-radius: 10px;
             margin: 20px 0;
-            background: #000;
+            background: black;
             min-height: 300px;
+            display: none;
+        }
+        .placeholder {
+            color: #ccc;
+            font-style: italic;
+            padding: 50px;
+            border: 2px dashed rgba(255,255,255,0.3);
+            border-radius: 10px;
         }
         .status {
             padding: 15px;
@@ -58,19 +66,14 @@
             border-radius: 20px;
             cursor: pointer;
         }
-        .placeholder {
-            color: #ccc;
-            font-style: italic;
-            padding: 50px;
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📡 Camera Receiver</h1>
-        <p>This site displays images received from the camera sender</p>
+        <p>Live images from: <strong>cam-sender-steel.vercel.app</strong></p>
         
-        <div class="status" id="status">Waiting for images...</div>
+        <div class="status" id="status">Waiting for connection from sender...</div>
         
         <div id="imageContainer">
             <img id="receivedImage" src="" alt="Received image will appear here">
@@ -81,13 +84,13 @@
             <div class="info-item">Last received: <span id="lastTime">Never</span></div>
             <div class="info-item">Total received: <span id="totalReceived">0</span></div>
             <div class="info-item">Image size: <span id="imageSize">0 KB</span></div>
-            <div class="info-item">Sender IP: <span id="senderInfo">Unknown</span></div>
+            <div class="info-item">Frame number: <span id="frameNumber">-</span></div>
         </div>
         
         <div>
-            <button onclick="clearImages()">Clear Images</button>
+            <button onclick="clearImages()">Clear Display</button>
             <button onclick="openSender()">Open Sender</button>
-            <button onclick="startAutoRefresh()">Auto-Refresh</button>
+            <button onclick="toggleAutoRefresh()" id="refreshBtn">Enable Auto-Refresh</button>
         </div>
         
         <div style="margin-top: 20px; font-size: 12px; opacity: 0.7;">
@@ -96,45 +99,87 @@
     </div>
 
     <script>
+        // Configuration - USING YOUR ACTUAL SENDER URL
+        const SENDER_URL = "https://cam-sender-steel.vercel.app";
+        
         let totalReceived = 0;
-        let autoRefreshInterval;
-        const SENDER_URL = "https://cam-sender-steel.vercel.app"; // CHANGE THIS
+        let autoRefreshInterval = null;
+        let isAutoRefresh = false;
         
-        // Update sender URL
-        document.getElementById('senderInfo').textContent = new URL(SENDER_URL).hostname;
-        
-        function updateStatus(message) {
-            document.getElementById('status').textContent = message;
+        function updateStatus(message, isError = false) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.style.background = isError ? 'rgba(255, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.3)';
         }
         
-        function displayImage(imageData) {
+        function displayImage(imageData, frameNumber = 'Unknown') {
             const imgElement = document.getElementById('receivedImage');
             const placeholder = document.getElementById('placeholder');
             
             imgElement.src = imageData;
-            placeholder.style.display = 'none';
             imgElement.style.display = 'block';
+            placeholder.style.display = 'none';
             
             // Update info
             totalReceived++;
+            const currentTime = new Date();
+            document.getElementById('lastTime').textContent = currentTime.toLocaleTimeString();
             document.getElementById('totalReceived').textContent = totalReceived;
-            document.getElementById('lastTime').textContent = new Date().toLocaleTimeString();
+            document.getElementById('frameNumber').textContent = frameNumber;
             
             // Calculate image size
             const sizeKB = Math.round((imageData.length * 0.75) / 1024);
             document.getElementById('imageSize').textContent = sizeKB + ' KB';
             
-            updateStatus(`✅ Image received! (${sizeKB} KB)`);
+            updateStatus(`✅ Image #${frameNumber} received (${sizeKB} KB)`);
         }
         
-        function checkForImage() {
+        function clearImages() {
+            const imgElement = document.getElementById('receivedImage');
+            const placeholder = document.getElementById('placeholder');
+            
+            imgElement.src = '';
+            imgElement.style.display = 'none';
+            placeholder.style.display = 'block';
+            
+            updateStatus("Display cleared - waiting for new images");
+        }
+        
+        function openSender() {
+            window.open(SENDER_URL, '_blank');
+        }
+        
+        function toggleAutoRefresh() {
+            const button = document.getElementById('refreshBtn');
+            
+            if (isAutoRefresh) {
+                // Stop auto-refresh
+                clearInterval(autoRefreshInterval);
+                isAutoRefresh = false;
+                button.textContent = 'Enable Auto-Refresh';
+                button.style.background = '#2196F3';
+                updateStatus("Auto-refresh disabled");
+            } else {
+                // Start auto-refresh (every 5 seconds)
+                autoRefreshInterval = setInterval(() => {
+                    checkForImageFromURL();
+                }, 5000);
+                isAutoRefresh = true;
+                button.textContent = 'Disable Auto-Refresh';
+                button.style.background = '#f5576c';
+                updateStatus("Auto-refresh enabled - checking every 5 seconds");
+            }
+        }
+        
+        function checkForImageFromURL() {
             const urlParams = new URLSearchParams(window.location.search);
             const imageData = urlParams.get('image');
+            const frameNumber = urlParams.get('frame') || 'URL';
             
             if (imageData) {
-                displayImage(imageData);
+                displayImage(imageData, frameNumber);
                 
-                // Clean URL without removing page reload ability
+                // Clean URL but keep functionality
                 if (history.replaceState) {
                     const cleanURL = window.location.pathname;
                     history.replaceState(null, '', cleanURL);
@@ -142,44 +187,28 @@
             }
         }
         
-        function clearImages() {
-            document.getElementById('receivedImage').src = '';
-            document.getElementById('placeholder').style.display = 'block';
-            document.getElementById('receivedImage').style.display = 'none';
-            updateStatus("Images cleared");
-        }
-        
-        function openSender() {
-            window.open(SENDER_URL, '_blank');
-        }
-        
-        function startAutoRefresh() {
-            // Refresh every 3 seconds to check for new images
-            autoRefreshInterval = setInterval(() => {
-                location.reload();
-            }, 3000);
-            
-            updateStatus("Auto-refresh enabled (every 3 seconds)");
-        }
-        
-        function stopAutoRefresh() {
-            clearInterval(autoRefreshInterval);
-            updateStatus("Auto-refresh stopped");
-        }
-        
-        // Check for image on page load
-        window.addEventListener('load', function() {
-            checkForImage();
-            updateStatus("Ready - waiting for images from sender");
+        // Listen for messages from the sender window
+        window.addEventListener('message', function(event) {
+            // Verify the message is from our sender
+            if (event.origin === SENDER_URL) {
+                if (event.data.type === 'newImage') {
+                    displayImage(event.data.image, event.data.frameNumber);
+                }
+            }
         });
         
-        // Also check when page becomes visible (if using tabs)
+        // Check for image on page load (from URL parameters)
+        window.addEventListener('load', function() {
+            checkForImageFromURL();
+            updateStatus("Ready - waiting for images from: " + SENDER_URL);
+        });
+        
+        // Also check when page becomes visible
         document.addEventListener('visibilitychange', function() {
             if (!document.hidden) {
-                checkForImage();
+                checkForImageFromURL();
             }
         });
     </script>
 </body>
-
 </html>
