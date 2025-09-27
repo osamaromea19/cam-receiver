@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Camera Receiver</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 100%;
+            padding: 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        #receivedImage {
+            max-width: 100%;
+            border: 3px solid white;
+            border-radius: 10px;
+            margin: 20px 0;
+            background: #000;
+            min-height: 300px;
+        }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .info-box {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .info-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+        .placeholder {
+            color: #ccc;
+            font-style: italic;
+            padding: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📡 Camera Receiver</h1>
+        <p>This site displays images received from the camera sender</p>
+        
+        <div class="status" id="status">Waiting for images...</div>
+        
+        <div id="imageContainer">
+            <img id="receivedImage" src="" alt="Received image will appear here">
+            <div id="placeholder" class="placeholder">No image received yet</div>
+        </div>
+        
+        <div class="info-box">
+            <div class="info-item">Last received: <span id="lastTime">Never</span></div>
+            <div class="info-item">Total received: <span id="totalReceived">0</span></div>
+            <div class="info-item">Image size: <span id="imageSize">0 KB</span></div>
+            <div class="info-item">Sender IP: <span id="senderInfo">Unknown</span></div>
+        </div>
+        
+        <div>
+            <button onclick="clearImages()">Clear Images</button>
+            <button onclick="openSender()">Open Sender</button>
+            <button onclick="startAutoRefresh()">Auto-Refresh</button>
+        </div>
+        
+        <div style="margin-top: 20px; font-size: 12px; opacity: 0.7;">
+            <p>This page will automatically show images when they are sent from the camera site.</p>
+        </div>
+    </div>
+
+    <script>
+        let totalReceived = 0;
+        let autoRefreshInterval;
+        const SENDER_URL = "https://your-sender-site.vercel.app"; // CHANGE THIS
+        
+        // Update sender URL
+        document.getElementById('senderInfo').textContent = new URL(SENDER_URL).hostname;
+        
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+        
+        function displayImage(imageData) {
+            const imgElement = document.getElementById('receivedImage');
+            const placeholder = document.getElementById('placeholder');
+            
+            imgElement.src = imageData;
+            placeholder.style.display = 'none';
+            imgElement.style.display = 'block';
+            
+            // Update info
+            totalReceived++;
+            document.getElementById('totalReceived').textContent = totalReceived;
+            document.getElementById('lastTime').textContent = new Date().toLocaleTimeString();
+            
+            // Calculate image size
+            const sizeKB = Math.round((imageData.length * 0.75) / 1024);
+            document.getElementById('imageSize').textContent = sizeKB + ' KB';
+            
+            updateStatus(`✅ Image received! (${sizeKB} KB)`);
+        }
+        
+        function checkForImage() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const imageData = urlParams.get('image');
+            
+            if (imageData) {
+                displayImage(imageData);
+                
+                // Clean URL without removing page reload ability
+                if (history.replaceState) {
+                    const cleanURL = window.location.pathname;
+                    history.replaceState(null, '', cleanURL);
+                }
+            }
+        }
+        
+        function clearImages() {
+            document.getElementById('receivedImage').src = '';
+            document.getElementById('placeholder').style.display = 'block';
+            document.getElementById('receivedImage').style.display = 'none';
+            updateStatus("Images cleared");
+        }
+        
+        function openSender() {
+            window.open(SENDER_URL, '_blank');
+        }
+        
+        function startAutoRefresh() {
+            // Refresh every 3 seconds to check for new images
+            autoRefreshInterval = setInterval(() => {
+                location.reload();
+            }, 3000);
+            
+            updateStatus("Auto-refresh enabled (every 3 seconds)");
+        }
+        
+        function stopAutoRefresh() {
+            clearInterval(autoRefreshInterval);
+            updateStatus("Auto-refresh stopped");
+        }
+        
+        // Check for image on page load
+        window.addEventListener('load', function() {
+            checkForImage();
+            updateStatus("Ready - waiting for images from sender");
+        });
+        
+        // Also check when page becomes visible (if using tabs)
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                checkForImage();
+            }
+        });
+    </script>
+</body>
+</html>
